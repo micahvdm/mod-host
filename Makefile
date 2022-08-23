@@ -17,7 +17,7 @@ SHAREDIR = $(PREFIX)/share
 MANDIR = $(SHAREDIR)/man/man1/
 
 # default compiler and linker flags
-CFLAGS += -O3 -Wall -Wextra -c -std=gnu99 -fPIC -D_GNU_SOURCE -pthread
+CFLAGS += -mcpu=cortex-a53 -mtune=cortex-a53 -Ofast -Wall -Wextra -c -std=gnu99 -fPIC -D_GNU_SOURCE -pthread
 CFLAGS += -Wno-deprecated-declarations
 CFLAGS += -Werror=implicit-function-declaration -Werror=return-type
 
