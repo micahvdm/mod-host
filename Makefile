@@ -17,7 +17,7 @@ SHAREDIR = $(PREFIX)/share
 MANDIR = $(SHAREDIR)/man/man1/
 
 # default compiler and linker flags
-CFLAGS += -mcpu=cortex-a53 -mtune=cortex-a53 -Ofast -Wall -Wextra -c -std=gnu99 -fPIC -D_GNU_SOURCE -pthread
+CFLAGS += -Ofast -Wall -Wextra -c -std=gnu99 -fPIC -D_GNU_SOURCE -pthread
 CFLAGS += -Wno-deprecated-declarations
 CFLAGS += -Werror=implicit-function-declaration -Werror=return-type
 
@@ -97,10 +97,10 @@ INCS += $(shell pkg-config --cflags cc_client) -DHAVE_CONTROLCHAIN
 endif
 
 # hylia/link support
-ifeq ($(shell pkg-config --exists hylia && echo true), true)
+# ifeq ($(shell pkg-config --exists hylia && echo true), true)
 LIBS += $(shell pkg-config --libs hylia)
 INCS += $(shell pkg-config --cflags hylia) -DHAVE_HYLIA
-endif
+# endif
 
 LIBS += -lpthread -lm
 
