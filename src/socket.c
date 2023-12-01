@@ -26,10 +26,20 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#else
 #include <sys/socket.h>
 #include <netinet/in.h>
+#define closesocket close
+#define INVALID_SOCKET -1
+typedef int SOCKET;
+#endif
 
 #include "socket.h"
+#include "effects.h"
+#include "mod-memset.h"
 
 
 /*
@@ -66,11 +76,13 @@
 ************************************************************************************************************************
 */
 
-static int g_serverfd, g_fbserverfd, g_buffer_size;
-static void (*g_receive_cb)(msg_t *msg);
+static SOCKET g_serverfd = INVALID_SOCKET;
+static SOCKET g_fbserverfd = INVALID_SOCKET;
+static SOCKET g_clientfd = INVALID_SOCKET;
+static SOCKET g_fbclientfd = INVALID_SOCKET;
 
-// socket clients, for safe external shutdown
-static int g_clientfd, g_fbclientfd;
+static int g_buffer_size;
+static void (*g_receive_cb)(msg_t *msg);
 
 /*
 ************************************************************************************************************************
@@ -99,52 +111,67 @@ static int g_clientfd, g_fbclientfd;
 ************************************************************************************************************************
 */
 
-#define MOD_SOCKET_FLAGS   SO_REUSEPORT
-#define MOD_SOCKET_BACKLOG -1
-
 int socket_start(int socket_port, int feedback_port, int buffer_size)
 {
-    g_clientfd = g_fbclientfd = -1;
-    g_serverfd = socket(AF_INET, SOCK_STREAM, 0);
-
-    if (g_serverfd < 0)
+#ifdef _WIN32
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
     {
-        perror("socket error");
+        perror("WSAStartup");
+        return -1;
+    }
+
+    if (LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2)
+    {
+        WSACleanup();
+        perror("WSAStartup  version");
+        return -1;
+    }
+#endif
+
+    g_clientfd = g_fbclientfd = INVALID_SOCKET;
+    g_serverfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+    if (g_serverfd == INVALID_SOCKET)
+    {
+        perror("g_serverfd socket error");
         return -1;
     }
 
     if (feedback_port != 0)
     {
-        g_fbserverfd = socket(AF_INET, SOCK_STREAM, 0);
+        g_fbserverfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
-        if (g_fbserverfd < 0)
+        if (g_fbserverfd == INVALID_SOCKET)
         {
-            perror("socket error");
+            perror("g_fbserverfd socket error");
             return -1;
         }
     }
     else
     {
-        g_fbserverfd = -1;
+        g_fbserverfd = INVALID_SOCKET;
     }
 
+#ifndef _WIN32
     /* Allow the reuse of the socket address */
     int value = 1;
-    setsockopt(g_serverfd, SOL_SOCKET, MOD_SOCKET_FLAGS, &value, sizeof(value));
+    setsockopt(g_serverfd, SOL_SOCKET, SO_REUSEPORT, &value, sizeof(value));
     if (feedback_port != 0)
-        setsockopt(g_fbserverfd, SOL_SOCKET, MOD_SOCKET_FLAGS, &value, sizeof(value));
+        setsockopt(g_fbserverfd, SOL_SOCKET, SO_REUSEPORT, &value, sizeof(value));
 
     /* increase socket size */
     value = 131071;
     setsockopt(g_serverfd, SOL_SOCKET, SO_RCVBUF, &value, sizeof(value));
     if (feedback_port != 0)
         setsockopt(g_fbserverfd, SOL_SOCKET, SO_RCVBUF, &value, sizeof(value));
+#endif
 
     /* Startup the socket struct */
     struct sockaddr_in serv_addr;
-    memset((char *) &serv_addr, 0, sizeof(serv_addr));
+    memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
-#ifdef __MOD_DEVICES__
+#if defined(__MOD_DEVICES__) || defined(_WIN32)
     serv_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 #else
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -170,13 +197,13 @@ int socket_start(int socket_port, int feedback_port, int buffer_size)
     }
 
     /* Start listen the sockets */
-    if (listen(g_serverfd, MOD_SOCKET_BACKLOG) < 0)
+    if (listen(g_serverfd, -1) < 0)
     {
         perror("listen error");
         return -1;
     }
 
-    if (feedback_port != 0 && listen(g_fbserverfd, MOD_SOCKET_BACKLOG) < 0)
+    if (feedback_port != 0 && listen(g_fbserverfd, -1) < 0)
     {
         perror("listen error");
         return -1;
@@ -191,28 +218,32 @@ int socket_start(int socket_port, int feedback_port, int buffer_size)
 
 void socket_finish(void)
 {
-    if (g_serverfd == -1)
+    if (g_serverfd == INVALID_SOCKET)
         return;
 
     // make local copies so that we can invalidate these vars first
-    const int serverfd   = g_serverfd;
-    const int fbserverfd = g_fbserverfd;
-    g_serverfd = g_fbserverfd = -1;
+    const SOCKET serverfd   = g_serverfd;
+    const SOCKET fbserverfd = g_fbserverfd;
+    g_serverfd = g_fbserverfd = INVALID_SOCKET;
 
     // shutdown clients, but don't close them
-    if (g_fbclientfd != -1)
+    if (g_fbclientfd != INVALID_SOCKET)
         shutdown(g_fbclientfd, SHUT_RDWR);
     shutdown(g_clientfd, SHUT_RDWR);
 
     // shutdown and close servers
-    if (fbserverfd != -1)
+    if (fbserverfd != INVALID_SOCKET)
     {
         shutdown(fbserverfd, SHUT_RDWR);
-        close(fbserverfd);
+        closesocket(fbserverfd);
     }
 
     shutdown(serverfd, SHUT_RDWR);
-    close(serverfd);
+    closesocket(serverfd);
+
+#ifdef _WIN32
+    WSACleanup();
+#endif
 }
 
 
@@ -224,12 +255,17 @@ void socket_set_receive_cb(void (*receive_cb)(msg_t *msg))
 
 int socket_send(int destination, const char *buffer, int size)
 {
-    int ret;
+    int ret = -1;
 
-    ret = write(destination, buffer, size);
-    if (ret < 0)
+    while (size > 0)
     {
-        perror("send error");
+        ret = send(destination, buffer, size, 0);
+        if (ret < 0)
+        {
+            perror("send error");
+        }
+        size -= ret;
+        buffer += ret;
     }
 
     return ret;
@@ -238,7 +274,7 @@ int socket_send(int destination, const char *buffer, int size)
 
 int socket_send_feedback(const char *buffer)
 {
-    if (g_fbclientfd < 0) return -1;
+    if (g_fbclientfd == INVALID_SOCKET) return -1;
 
     return socket_send(g_fbclientfd, buffer, strlen(buffer)+1);
 }
@@ -246,9 +282,8 @@ int socket_send_feedback(const char *buffer)
 
 void socket_run(int exit_on_failure)
 {
-    int clientfd, fbclientfd, count;
-    struct sockaddr_in cli_addr;
-    socklen_t clilen;
+    SOCKET clientfd, fbclientfd;
+    int count;
     char *buffer;
     char *msgbuffer;
     msg_t msg;
@@ -265,9 +300,8 @@ void socket_run(int exit_on_failure)
     }
 
     /* Wait for client connection */
-    clilen = sizeof(cli_addr);
-    clientfd = accept(g_serverfd, (struct sockaddr *) &cli_addr, &clilen);
-    if (clientfd < 0)
+    clientfd = accept(g_serverfd, NULL, NULL);
+    if (clientfd == INVALID_SOCKET)
     {
         free(buffer);
 
@@ -278,13 +312,13 @@ void socket_run(int exit_on_failure)
         exit(EXIT_FAILURE);
     }
 
-    if (g_fbserverfd != -1)
+    if (g_fbserverfd != INVALID_SOCKET)
     {
-        fbclientfd = accept(g_fbserverfd, (struct sockaddr *) &cli_addr, &clilen);
-        if (fbclientfd < 0)
+        fbclientfd = accept(g_fbserverfd, NULL, NULL);
+        if (fbclientfd == INVALID_SOCKET)
         {
             free(buffer);
-            close(clientfd);
+            closesocket(clientfd);
 
             if (! exit_on_failure)
                 return;
@@ -295,16 +329,16 @@ void socket_run(int exit_on_failure)
     }
     else
     {
-        fbclientfd = -1;
+        fbclientfd = INVALID_SOCKET;
     }
 
     g_clientfd = clientfd;
     g_fbclientfd = fbclientfd;
 
-    while (g_serverfd >= 0)
+    while (g_serverfd != INVALID_SOCKET)
     {
-        memset(buffer, 0, g_buffer_size);
-        count = read(clientfd, buffer, g_buffer_size);
+        mod_memset(buffer, 0, g_buffer_size);
+        count = recv(clientfd, buffer, g_buffer_size, 0);
 
         if (count > 0) /* Data received */
         {
@@ -331,8 +365,8 @@ void socket_run(int exit_on_failure)
                         msgbuffer = realloc(msgbuffer, new_buffer_size);
                     }
 
-                    memset(msgbuffer + count, 0, g_buffer_size);
-                    new_count = read(clientfd, msgbuffer + count, g_buffer_size);
+                    mod_memset(msgbuffer + count, 0, g_buffer_size);
+                    new_count = recv(clientfd, msgbuffer + count, g_buffer_size, 0);
 
                     if (new_count > 0) /* Data received */
                     {
@@ -364,6 +398,8 @@ void socket_run(int exit_on_failure)
 
             if (msgbuffer != buffer)
                 free(msgbuffer);
+
+            effects_idle_external_uis();
         }
         else if (count < 0) /* Error */
         {
@@ -380,14 +416,14 @@ void socket_run(int exit_on_failure)
     }
 
 outside_loop:
-    if (fbclientfd != -1)
+    if (fbclientfd != INVALID_SOCKET)
     {
-        g_fbclientfd = -1;
-        close(fbclientfd);
+        g_fbclientfd = INVALID_SOCKET;
+        closesocket(fbclientfd);
     }
 
-    g_clientfd = -1;
-    close(clientfd);
+    g_clientfd = INVALID_SOCKET;
+    closesocket(clientfd);
 
     free(buffer);
 }

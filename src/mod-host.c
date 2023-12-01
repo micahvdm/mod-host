@@ -36,6 +36,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <jack/jack.h>
+#include <pthread.h>
 #include <signal.h>
 
 #ifndef SKIP_READLINE
@@ -560,6 +561,12 @@ static void transport_sync(proto_t *proto)
     protocol_response_int(resp, proto);
 }
 
+static void show_external_ui(proto_t *proto)
+{
+    const int resp = effects_show_external_ui(atoi(proto->list[1]));
+    protocol_response_int(resp, proto);
+}
+
 static void output_data_ready(proto_t *proto)
 {
     effects_output_data_ready();
@@ -584,6 +591,23 @@ static void quit_cb(proto_t *proto)
     socket_finish();
     effects_finish(1);
     exit(EXIT_SUCCESS);
+}
+
+static void self_test_effects_set_property_cb(proto_t *proto)
+{
+    char ok = '1';
+    if (atoi(proto->list[1]) != 1337)
+        ok = '0';
+    if (strcmp(proto->list[2], "urn:test"))
+        ok = '0';
+    if (strncmp(proto->list[3], "{\n  \"version\":", 14))
+        ok = '0';
+
+    FILE* f = fopen("tests/self-test-result.json", "w");
+    fwrite(proto->list[3], strlen(proto->list[3]), 1, f);
+    fclose(f);
+
+    printf("tests ok? %c\n", ok);
 }
 
 #ifndef SKIP_READLINE
@@ -690,6 +714,7 @@ static int mod_host_init(jack_client_t* client, int socket_port, int feedback_po
     protocol_add_command(STATE_TMPDIR, state_tmpdir);
     protocol_add_command(TRANSPORT, transport);
     protocol_add_command(TRANSPORT_SYNC, transport_sync);
+    protocol_add_command(SHOW_EXTERNAL_UI, show_external_ui);
     protocol_add_command(OUTPUT_DATA_READY, output_data_ready);
 
     /* skip help and quit for internal client */
@@ -733,11 +758,14 @@ int main(int argc, char **argv)
 {
     /* Command line options */
     static struct option long_options[] = {
+#ifndef _WIN32
         {"nofork", no_argument, 0, 'n'},
+#endif
         {"verbose", no_argument, 0, 'v'},
         {"socket-port", required_argument, 0, 'p'},
         {"feedback-port", required_argument, 0, 'f'},
         {"interactive", no_argument, 0, 'i'},
+        {"self-test", no_argument, 0, 't'},
         {"version", no_argument, 0, 'V'},
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
@@ -746,7 +774,7 @@ int main(int argc, char **argv)
     int opt, opt_index = 0;
 
     /* parse command line options */
-    int nofork = 0, verbose = 0,  interactive = 0;
+    int nofork = 0, verbose = 0,  interactive = 0, selftest = 0;
     int socket_port = SOCKET_DEFAULT_PORT, feedback_port = 0;
     while ((opt = getopt_long(argc, argv, "nvp:f:iVh", long_options, &opt_index)) != -1)
     {
@@ -774,6 +802,10 @@ int main(int argc, char **argv)
                 nofork = 1;
                 break;
 
+            case 't':
+                selftest = 1;
+                break;
+
             case 'V':
                 printf(
                     "%s version: %s\n"
@@ -792,7 +824,9 @@ int main(int argc, char **argv)
 #ifndef SKIP_READLINE
                     "  -i, --interactive              interactive mode\n"
 #endif
+#ifndef _WIN32
                     "  -n, --nofork                   run in nonforking mode\n"
+#endif
                     "  -V, --version                  print program version and exit\n"
                     "  -h, --help                     print this help and exit\n",
                 argv[0]);
@@ -801,8 +835,28 @@ int main(int argc, char **argv)
         }
     }
 
+    if (selftest)
+    {
+        protocol_verbose(1);
+        protocol_add_command(EFFECT_PATCH_SET, self_test_effects_set_property_cb);
+
+        msg_t msg = { 0, NULL, 0 };
+        FILE *f = fopen("tests/self-test.json", "r");
+        fseek(f, 0, SEEK_END);
+        msg.data_size = ftell(f);
+        msg.data = malloc(msg.data_size + 24);
+        fseek(f, 0, SEEK_SET);
+        strcpy(msg.data, "patch_set 1337 urn:test ");
+        fread(msg.data + 24, msg.data_size, 1, f);
+        fclose(f);
+        protocol_parse(&msg);
+        free(msg.data);
+        exit(EXIT_SUCCESS);
+    }
+
     if (! nofork)
     {
+#ifndef _WIN32
         int pid;
         pid = fork();
         if (pid != 0)
@@ -822,6 +876,7 @@ int main(int argc, char **argv)
             }
             exit(EXIT_SUCCESS);
         }
+#endif
     }
 
     if (mod_host_init(NULL, socket_port, feedback_port) != 0)
@@ -835,11 +890,14 @@ int main(int argc, char **argv)
     if (interactive)
     {
         interactive_mode();
+        effects_finish(1);
         return 0;
     }
     else
 #endif
     {
+#ifdef _WIN32
+#else
         struct sigaction sig;
         memset(&sig, 0, sizeof(sig));
 
@@ -848,6 +906,7 @@ int main(int argc, char **argv)
         sigemptyset(&sig.sa_mask);
         sigaction(SIGTERM, &sig, NULL);
         sigaction(SIGINT, &sig, NULL);
+#endif
     }
 
     /* Verbose */
