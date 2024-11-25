@@ -48,7 +48,7 @@ endif
 # libraries
 LIBS = $(shell pkg-config --libs lilv-0)
 
-ifeq ($(MODAPP),1)
+ifeq ($(MOD_DESKTOP),1)
 LIBS += $(subst -ljack ,-ljackserver ,$(shell pkg-config --libs jack))
 ifneq ($(MACOS)$(WINDOWS),true)
 LIBS += -Wl,-rpath,'$$ORIGIN/..'
@@ -162,9 +162,9 @@ install: install_man
 	install -d $(DESTDIR)$(BINDIR)
 	install -m 755 $(PROG) $(DESTDIR)$(BINDIR)
 	install -d $(DESTDIR)$(shell pkg-config --variable=libdir jack)/jack/
-	install -m 755 $(PROG).so $(DESTDIR)$(shell pkg-config --variable=libdir jack)/jack/
-	install -m 755 fake-input.so $(DESTDIR)$(shell pkg-config --variable=libdir jack)/jack/
-	install -m 755 mod-monitor.so $(DESTDIR)$(shell pkg-config --variable=libdir jack)/jack/
+	install -m 644 $(PROG).so $(DESTDIR)$(shell pkg-config --variable=libdir jack)/jack/
+	install -m 644 fake-input.so $(DESTDIR)$(shell pkg-config --variable=libdir jack)/jack/
+	install -m 644 mod-monitor.so $(DESTDIR)$(shell pkg-config --variable=libdir jack)/jack/
 
 # clean rule
 clean:
