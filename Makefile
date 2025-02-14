@@ -15,6 +15,7 @@ PREFIX = /usr
 BINDIR = $(PREFIX)/bin
 SHAREDIR = $(PREFIX)/share
 MANDIR = $(SHAREDIR)/man/man1/
+LIBDIR = $(PREFIX)/lib
 
 # default compiler and linker flags
 CFLAGS += -O3 -Wall -Wextra -c -std=gnu99 -fPIC -D_GNU_SOURCE -pthread
@@ -165,10 +166,10 @@ src/mod-monitor.o: src/monitor/monitor-client.c
 install: install_man
 	install -d $(DESTDIR)$(BINDIR)
 	install -m 755 $(PROG) $(DESTDIR)$(BINDIR)
-	install -d $(DESTDIR)$(shell pkg-config --variable=libdir jack)/jack/
-	install -m 644 $(PROG).so $(DESTDIR)$(shell pkg-config --variable=libdir jack)/jack/
-	install -m 644 fake-input.so $(DESTDIR)$(shell pkg-config --variable=libdir jack)/jack/
-	install -m 644 mod-monitor.so $(DESTDIR)$(shell pkg-config --variable=libdir jack)/jack/
+	install -d $(DESTDIR)$(LIBDIR)/jack/
+	install -m 644 $(PROG).so $(DESTDIR)$(LIBDIR)/jack/
+	install -m 644 fake-input.so $(DESTDIR)$(LIBDIR)/jack/
+	install -m 644 mod-monitor.so $(DESTDIR)$(LIBDIR)/jack/
 
 # clean rule
 clean:
