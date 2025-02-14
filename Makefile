@@ -11,7 +11,7 @@ SRC_DIR = ./src
 PROG = mod-host
 
 # default install paths
-PREFIX = /usr
+PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 SHAREDIR = $(PREFIX)/share
 MANDIR = $(SHAREDIR)/man/man1/
