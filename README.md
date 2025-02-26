@@ -209,6 +209,14 @@ The commands supported by mod-host are:
         * unmap the MIDI controller from a control port
         e.g.: midi_unmap 0 "gain"
 
+    midi_map_tempo_tap <midi_channel> <midi_cc>
+        * map the MIDI tempo tap
+        e.g.: midi_map_tempo_tap 0 0 
+
+     midi_unmap_tempo_tap
+        * unmap the MIDI tempo tap
+        e.g.: midi_unmap_tempo_tap
+
     monitor_audio_levels <source_port_name> <enable>
         * monitor audio levels for a specific jack port (on the feedback port)
         e.g.: monitor_audio_levels "system:capture_1" 1
