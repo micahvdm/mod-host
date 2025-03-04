@@ -160,7 +160,7 @@ mod-monitor.so: src/mod-monitor.o src/dsp/compressor_core.o
 	$(CC) $^ $(LDFLAGS) $(LIBS) -shared -o $@
 
 src/mod-monitor.o: src/monitor/monitor-client.c
-	$(CC) $(INCS) $(CFLAGS) -DSTANDALONE_MONITOR_CLIENT -o $@ $<
+	$(CC) $(INCS) $(CFLAGS) -o $@ $<
 
 # install rule
 install: install_man
