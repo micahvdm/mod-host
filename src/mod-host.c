@@ -744,6 +744,87 @@ static void term_signal(int sig)
     return; (void)sig;
 }
 
+/* Compressor Commands */
+static void compressor_enable_cb(proto_t *proto)
+{
+    g_compressor_mode = 1; // Enable compressor
+    protocol_response("resp 0", proto);
+}
+
+static void compressor_disable_cb(proto_t *proto)
+{
+    g_compressor_mode = 0; // Disable compressor
+    protocol_response("resp 0", proto);
+}
+
+static void compressor_set_mode_cb(proto_t *proto)
+{
+    if (proto->list_count >= 2) {
+        int mode = atoi(proto->list[1]);
+        g_compressor_mode = mode;
+        protocol_response("resp 0", proto);
+    } else {
+        protocol_response_int(ERR_INVALID_OPERATION, proto);
+    }
+}
+
+static void compressor_set_release_cb(proto_t *proto)
+{
+    if (proto->list_count >= 2) {
+        int release = atoi(proto->list[1]);
+        g_compressor_release = release;
+        protocol_response("resp 0", proto);
+    } else {
+        protocol_response_int(ERR_INVALID_OPERATION, proto);
+    }
+}
+
+/* Noise Gate Commands */
+static void noisegate_enable_cb(proto_t *proto)
+{
+    g_noisegate_enabled = true;
+    protocol_response("resp 0", proto);
+}
+
+static void noisegate_disable_cb(proto_t *proto)
+{
+    g_noisegate_enabled = false;
+    protocol_response("resp 0", proto);
+}
+
+static void noisegate_set_channel_cb(proto_t *proto)
+{
+    if (proto->list_count >= 2) {
+        int channel = atoi(proto->list[1]);
+        g_noisegate_channel = channel;
+        protocol_response("resp 0", proto);
+    } else {
+        protocol_response_int(ERR_INVALID_OPERATION, proto);
+    }
+}
+
+static void noisegate_set_decay_cb(proto_t *proto)
+{
+    if (proto->list_count >= 2) {
+        int decay = atoi(proto->list[1]);
+        g_noisegate_decay = decay;
+        protocol_response("resp 0", proto);
+    } else {
+        protocol_response_int(ERR_INVALID_OPERATION, proto);
+    }
+}
+
+static void noisegate_set_threshold_cb(proto_t *proto)
+{
+    if (proto->list_count >= 2) {
+        float threshold = atof(proto->list[1]);
+        g_noisegate_threshold = threshold;
+        protocol_response("resp 0", proto);
+    } else {
+        protocol_response_int(ERR_INVALID_OPERATION, proto);
+    }
+}
+
 static int mod_host_init(jack_client_t* client, int socket_port, int feedback_port)
 {
 #ifdef HAVE_FFTW335
@@ -812,6 +893,15 @@ static int mod_host_init(jack_client_t* client, int socket_port, int feedback_po
     protocol_add_command(TRANSPORT_SYNC, transport_sync);
     protocol_add_command(SHOW_EXTERNAL_UI, show_external_ui);
     protocol_add_command(OUTPUT_DATA_READY, output_data_ready);
+    protocol_add_command(COMPRESSOR_ENABLE, compressor_enable_cb);
+    protocol_add_command(COMPRESSOR_DISABLE, compressor_disable_cb);
+    protocol_add_command(COMPRESSOR_SET_MODE, compressor_set_mode_cb);
+    protocol_add_command(COMPRESSOR_SET_RELEASE, compressor_set_release_cb);
+    protocol_add_command(NOISEGATE_ENABLE, noisegate_enable_cb);
+    protocol_add_command(NOISEGATE_DISABLE, noisegate_disable_cb);
+    protocol_add_command(NOISEGATE_SET_CHANNEL, noisegate_set_channel_cb);
+    protocol_add_command(NOISEGATE_SET_DECAY, noisegate_set_decay_cb);
+    protocol_add_command(NOISEGATE_SET_THRESHOLD, noisegate_set_threshold_cb);
 
     /* skip help and quit for internal client */
     if (client == NULL)
