@@ -748,12 +748,14 @@ static void term_signal(int sig)
 static void compressor_enable_cb(proto_t *proto)
 {
     g_compressor_mode = 1; // Enable compressor
+    monitor_client_setup_compressor(g_compressor_mode, g_compressor_release);
     protocol_response("resp 0", proto);
 }
 
 static void compressor_disable_cb(proto_t *proto)
 {
     g_compressor_mode = 0; // Disable compressor
+    monitor_client_setup_compressor(g_compressor_mode, g_compressor_release);
     protocol_response("resp 0", proto);
 }
 
@@ -762,6 +764,7 @@ static void compressor_set_mode_cb(proto_t *proto)
     if (proto->list_count >= 2) {
         int mode = atoi(proto->list[1]);
         g_compressor_mode = mode;
+        monitor_client_setup_compressor(g_compressor_mode, g_compressor_release);
         protocol_response("resp 0", proto);
     } else {
         protocol_response_int(ERR_INVALID_OPERATION, proto);
@@ -773,6 +776,7 @@ static void compressor_set_release_cb(proto_t *proto)
     if (proto->list_count >= 2) {
         int release = atoi(proto->list[1]);
         g_compressor_release = release;
+        monitor_client_setup_compressor(g_compressor_mode, g_compressor_release);
         protocol_response("resp 0", proto);
     } else {
         protocol_response_int(ERR_INVALID_OPERATION, proto);
@@ -808,6 +812,9 @@ static void noisegate_set_decay_cb(proto_t *proto)
     if (proto->list_count >= 2) {
         int decay = atoi(proto->list[1]);
         g_noisegate_decay = decay;
+        gate_update(&g_noisegate, g_sample_rate, 10, 1,
+                    g_noisegate_decay, 1,
+                    g_noisegate_threshold, g_noisegate_threshold - 20);
         protocol_response("resp 0", proto);
     } else {
         protocol_response_int(ERR_INVALID_OPERATION, proto);
@@ -819,6 +826,9 @@ static void noisegate_set_threshold_cb(proto_t *proto)
     if (proto->list_count >= 2) {
         float threshold = atof(proto->list[1]);
         g_noisegate_threshold = threshold;
+        gate_update(&g_noisegate, g_sample_rate, 10, 1,
+                    g_noisegate_decay, 1,
+                    g_noisegate_threshold, g_noisegate_threshold - 20);
         protocol_response("resp 0", proto);
     } else {
         protocol_response_int(ERR_INVALID_OPERATION, proto);
