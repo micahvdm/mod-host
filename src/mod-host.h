@@ -104,6 +104,16 @@
 #define HELP                 "help"
 #define QUIT                 "quit"
 
+/* --- New commands for compressor and noise gate --- */
+#define COMPRESSOR_ENABLE       "compressor_enable"
+#define COMPRESSOR_DISABLE      "compressor_disable"
+#define COMPRESSOR_SET_MODE     "compressor_set_mode %i"
+#define COMPRESSOR_SET_RELEASE  "compressor_set_release %i"
+#define NOISEGATE_ENABLE        "noisegate_enable"
+#define NOISEGATE_DISABLE       "noisegate_disable"
+#define NOISEGATE_SET_CHANNEL   "noisegate_set_channel %i"
+#define NOISEGATE_SET_DECAY     "noisegate_set_decay %i"
+#define NOISEGATE_SET_THRESHOLD "noisegate_set_threshold %f"
 
 /*
 ************************************************************************************************************************
