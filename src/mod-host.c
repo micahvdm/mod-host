@@ -106,7 +106,7 @@ static pthread_t intclient_socket_thread;
 *           LOCAL GLOBAL VARIABLES
 ************************************************************************************************************************
 */
-
+int g_noisegate_on = 0; // 1 = enabled, 0 = disabled
 
 /*
 ************************************************************************************************************************
@@ -786,13 +786,13 @@ static void compressor_set_release_cb(proto_t *proto)
 /* Noise Gate Commands */
 static void noisegate_enable_cb(proto_t *proto)
 {
-    g_noisegate_enabled = true;
+    g_noisegate_on = 1;
     protocol_response("resp 0", proto);
 }
 
 static void noisegate_disable_cb(proto_t *proto)
 {
-    g_noisegate_enabled = false;
+    g_noisegate_on = 0;
     protocol_response("resp 0", proto);
 }
 
@@ -812,9 +812,14 @@ static void noisegate_set_decay_cb(proto_t *proto)
     if (proto->list_count >= 2) {
         int decay = atoi(proto->list[1]);
         g_noisegate_decay = decay;
-        gate_update(&g_noisegate, g_sample_rate, 10, 1,
-                    g_noisegate_decay, 1,
-                    g_noisegate_threshold, g_noisegate_threshold - 20);
+        if (g_noisegate_on) {
+            gate_update(&g_noisegate, g_sample_rate, 10, 1,
+                        g_noisegate_decay, 1,
+                        g_noisegate_threshold, g_noisegate_threshold - 20);
+            // process noise gate normally
+        } else {
+            // bypass noise gate processing (e.g. do nothing or pass the signal through)
+        }
         protocol_response("resp 0", proto);
     } else {
         protocol_response_int(ERR_INVALID_OPERATION, proto);
@@ -826,9 +831,14 @@ static void noisegate_set_threshold_cb(proto_t *proto)
     if (proto->list_count >= 2) {
         float threshold = atof(proto->list[1]);
         g_noisegate_threshold = threshold;
-        gate_update(&g_noisegate, g_sample_rate, 10, 1,
-                    g_noisegate_decay, 1,
-                    g_noisegate_threshold, g_noisegate_threshold - 20);
+        if (g_noisegate_on) {
+            gate_update(&g_noisegate, g_sample_rate, 10, 1,
+                        g_noisegate_decay, 1,
+                        g_noisegate_threshold, g_noisegate_threshold - 20);
+            // process noise gate normally
+        } else {
+            // bypass noise gate processing (e.g. do nothing or pass the signal through)
+        }
         protocol_response("resp 0", proto);
     } else {
         protocol_response_int(ERR_INVALID_OPERATION, proto);
