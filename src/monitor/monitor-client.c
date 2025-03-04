@@ -379,12 +379,12 @@ static int GraphOrder(void* arg)
     return 0;
 }
 
-#ifdef STANDALONE_MONITOR_CLIENT
-__attribute__ ((visibility("default")))
-int jack_initialize(jack_client_t* client, const char* load_init);
-#else
-static
-#endif
+// #ifdef STANDALONE_MONITOR_CLIENT
+// __attribute__ ((visibility("default")))
+// int jack_initialize(jack_client_t* client, const char* load_init);
+// #else
+// static
+// #endif
 int jack_initialize(jack_client_t* client, const char* load_init)
 {
     /* can only be run once */
@@ -542,12 +542,12 @@ int jack_initialize(jack_client_t* client, const char* load_init)
    #endif
 }
 
-#ifdef STANDALONE_MONITOR_CLIENT
-__attribute__ ((visibility("default")))
-void jack_finish(void* arg);
-#else
-static
-#endif
+// #ifdef STANDALONE_MONITOR_CLIENT
+// __attribute__ ((visibility("default")))
+// void jack_finish(void* arg);
+// #else
+// static
+// #endif
 void jack_finish(void* arg)
 {
     monitor_client_t *const mon = arg;
