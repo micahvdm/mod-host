@@ -110,9 +110,9 @@ typedef unsigned int uint;
 #endif
 
 #include "mod-host.h"
+#include "dsp/gate_core.h"
 #ifdef __MOD_DEVICES__
 #include "sys_host.h"
-#include "dsp/gate_core.h"
 #endif
 
 #ifndef HAVE_NEW_LILV
@@ -741,12 +741,12 @@ static float g_sample_rate_f;
 static const char **g_capture_ports, **g_playback_ports;
 static int32_t g_midi_buffer_size, g_block_length;
 static int32_t g_thread_policy, g_thread_priority;
-#ifdef MOD_IO_PROCESSING_ENABLED
+// #ifdef MOD_IO_PROCESSING_ENABLED
 static jack_port_t *g_audio_in1_port;
 static jack_port_t *g_audio_in2_port;
 static jack_port_t *g_audio_out1_port;
 static jack_port_t *g_audio_out2_port;
-#endif
+// #endif
 static audio_monitor_t *g_audio_monitors;
 static pthread_mutex_t g_audio_monitor_mutex;
 static int g_audio_monitor_count;
@@ -825,17 +825,15 @@ static sys_serial_shm_data* g_hmi_data;
 static pthread_t g_hmi_client_thread;
 static pthread_mutex_t g_hmi_mutex;
 static hmi_addressing_t g_hmi_addressings[MAX_HMI_ADDRESSINGS];
+#endif
 
 /* internal processing */
 static int g_compressor_mode = 0;
 static int g_compressor_release = 100;
-#ifdef MOD_IO_PROCESSING_ENABLED
 static int g_noisegate_channel = 0;
 static int g_noisegate_decay = 10;
 static int g_noisegate_threshold = -60;
 static gate_t g_noisegate;
-#endif
-#endif
 
 static const char* const g_bypass_port_symbol = BYPASS_PORT_SYMBOL;
 static const char* const g_presets_port_symbol = PRESETS_PORT_SYMBOL;
@@ -2852,7 +2850,7 @@ static int ProcessGlobalClient(jack_nframes_t nframes, void *arg)
         }
     }
 
-#ifdef MOD_IO_PROCESSING_ENABLED
+// #ifdef MOD_IO_PROCESSING_ENABLED
     // Handle audio
     const float *const audio_in1_buf = (float*)jack_port_get_buffer(g_audio_in1_port, nframes);
     const float *const audio_in2_buf = (float*)jack_port_get_buffer(g_audio_in2_port, nframes);
@@ -2888,7 +2886,7 @@ static int ProcessGlobalClient(jack_nframes_t nframes, void *arg)
         }
         break;
     }
-#endif
+// #endif
 
     // Handle audio monitors
     if (pthread_mutex_trylock(&g_audio_monitor_mutex) == 0)
@@ -4069,7 +4067,7 @@ int effects_init(void* client)
         return ERR_JACK_PORT_REGISTER;
     }
 
-#ifdef MOD_IO_PROCESSING_ENABLED
+// #ifdef MOD_IO_PROCESSING_ENABLED
     g_audio_in1_port = jack_port_register(g_jack_global_client, "in1", JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
     g_audio_in2_port = jack_port_register(g_jack_global_client, "in2", JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
     g_audio_out1_port = jack_port_register(g_jack_global_client, "out1", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
@@ -4085,7 +4083,7 @@ int effects_init(void* client)
 
     jack_port_tie(g_audio_in1_port, g_audio_out1_port);
     jack_port_tie(g_audio_in2_port, g_audio_out2_port);
-#endif
+// #endif
 
     if (g_jack_global_client != NULL && strcmp(jack_get_client_name(g_jack_global_client), "mod-host") == 0 && ! monitor_client_init())
     {
@@ -4495,11 +4493,11 @@ int effects_init(void* client)
 
     for (int i = 0; i < MAX_HMI_ADDRESSINGS; i++)
         g_hmi_addressings[i].actuator_id = -1;
-
-#ifdef MOD_IO_PROCESSING_ENABLED
+#endif
+// #ifdef MOD_IO_PROCESSING_ENABLED
     gate_init(&g_noisegate);
-#endif
-#endif
+// #endif
+
 
     g_license.handle = NULL;
     g_license.license = GetLicenseFile;
@@ -4577,7 +4575,7 @@ int effects_init(void* client)
         ConnectToAllHardwareMIDIPorts();
     }
 
-#ifdef MOD_IO_PROCESSING_ENABLED
+// #ifdef MOD_IO_PROCESSING_ENABLED
     /* Connect to capture ports if avaiable */
     if (g_capture_ports != NULL && g_capture_ports[0] != NULL)
     {
@@ -4599,7 +4597,7 @@ int effects_init(void* client)
             jack_connect(g_jack_global_client, g_capture_ports[1], ourportname);
         }
     }
-#endif
+// #endif
 
     g_processing_enabled = true;
 
