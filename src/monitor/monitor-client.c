@@ -133,7 +133,7 @@ static inline float db2lin(const float db)
 }
 
 #ifdef MOD_MONITOR_STEREO_HANDLING
-static void ProcessMonitorLoopStereo(monitor_client_t *const mon, jack_nframes_t nframes, uint32_t offset)
+static float ProcessMonitorLoopStereo(monitor_client_t *const mon, jack_nframes_t nframes, uint32_t offset)
 {
     const float *const bufIn1  = jack_port_get_buffer(mon->in_ports[offset], nframes);
     const float *const bufIn2  = jack_port_get_buffer(mon->in_ports[offset + 1], nframes);
@@ -154,9 +154,9 @@ static void ProcessMonitorLoopStereo(monitor_client_t *const mon, jack_nframes_t
     const bool in2_connected = mon->connected & (1 << (offset + 1));
 
    #ifdef _MOD_DEVICE_DUOX
-    const sf_compressor_state_st* const compressor = offset == 2 ? &mon->compressor2 : &mon->compressor;
+    sf_compressor_state_st* const compressor = offset == 2 ? &mon->compressor2 : &mon->compressor;
    #else
-    const sf_compressor_state_st* const compressor = &mon->compressor;
+    sf_compressor_state_st* const compressor = &mon->compressor;
    #endif
 
     if (in1_connected && in2_connected)
@@ -289,8 +289,10 @@ static int ProcessMonitor(jack_nframes_t nframes, void *arg)
         return 0;
     }
 
-    const float volume = mon->volume;
+   #ifndef MOD_MONITOR_STEREO_HANDLING
     const float step_volume = mon->step_volume;
+   #endif
+    const float volume = mon->volume;
     float smooth_volume = mon->smooth_volume;
 
     if (floats_differ_enough(volume, smooth_volume))
@@ -395,7 +397,7 @@ int jack_initialize(jack_client_t* client, const char* load_init)
     }
 
     /* allocate monitor client */
-    monitor_client_t *const mon = calloc(sizeof(monitor_client_t), 1);
+    monitor_client_t *const mon = calloc(1, sizeof(monitor_client_t));
 
     if (!mon)
     {
@@ -434,7 +436,7 @@ int jack_initialize(jack_client_t* client, const char* load_init)
    #elif defined(_MOD_DEVICE_DUOX)
     const uint32_t numports = mon->extra_active ? 4 : 2;
    #elif defined(_DARKGLASS_DEVICE_PABLITO)
-    const uint32_t numports = 8;
+    const uint32_t numports = 10;
    #else
     uint32_t numports = 0;
 
@@ -509,7 +511,19 @@ int jack_initialize(jack_client_t* client, const char* load_init)
 
     const char* const ourclientname = jack_get_client_name(client);
 
-   #ifdef _MOD_DEVICE_DWARF
+   #if defined(_DARKGLASS_DEVICE_PABLITO)
+    snprintf(ourportname, MAX_CHAR_BUF_SIZE, "%s:in_9", ourclientname);
+    jack_connect(client, "anagram-output:out1", ourportname);
+
+    snprintf(ourportname, MAX_CHAR_BUF_SIZE, "%s:in_10", ourclientname);
+    jack_connect(client, "anagram-output:out2", ourportname);
+
+    snprintf(ourportname, MAX_CHAR_BUF_SIZE, "%s:out_5", ourclientname);
+    jack_connect(client, ourportname, "system:playback_5");
+
+    snprintf(ourportname, MAX_CHAR_BUF_SIZE, "%s:out_6", ourclientname);
+    jack_connect(client, ourportname, "system:playback_6");
+   #elif defined(_MOD_DEVICE_DWARF)
     snprintf(ourportname, MAX_CHAR_BUF_SIZE, "%s:out_2", ourclientname);
     jack_connect(client, ourportname, "system:playback_1");
 

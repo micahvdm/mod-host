@@ -242,6 +242,7 @@ enum PluginHints {
     HINT_HAS_MIDI_INPUT  = 1 << 3,
     HINT_HAS_STATE       = 1 << 4,
     HINT_STATE_UNSAFE    = 1 << 5, // state restore needs mutex protection
+    HINT_IS_LIVE         = 1 << 6, // needs to be always running, cannot have processing disabled
 };
 
 enum TransportSyncMode {
@@ -484,6 +485,7 @@ typedef struct LILV_NODES_T {
     LilvNode *hmi_interface;
     LilvNode *input;
     LilvNode *integer;
+    LilvNode *is_live;
     LilvNode *license_interface;
     LilvNode *logarithmic;
     LilvNode *maximum;
@@ -1801,8 +1803,9 @@ static int ProcessPlugin(jack_nframes_t nframes, void *arg)
     if (arg == NULL) return 0;
     effect = arg;
 
-    if (!g_processing_enabled || (
-        (effect->hints & HINT_STATE_UNSAFE) && pthread_mutex_trylock(&effect->state_restore_mutex) != 0))
+    if ((effect->hints & HINT_IS_LIVE) == 0 &&
+        (!g_processing_enabled || (
+         (effect->hints & HINT_STATE_UNSAFE) && pthread_mutex_trylock(&effect->state_restore_mutex) != 0)))
     {
         for (i = 0; i < effect->output_audio_ports_count; i++)
         {
@@ -2655,9 +2658,9 @@ static int ProcessGlobalClient(jack_nframes_t nframes, void *arg)
                             // set a sane low limit
                             if (dvalue <= 20.0)
                                 g_transport_bpm = 20;
-                            // >280 BPM over MIDI is unreasonable
-                            else if (dvalue >= 280.0)
-                                g_transport_bpm = 280.0;
+                            // >300 BPM over MIDI is unreasonable
+                            else if (dvalue >= 300.0)
+                                g_transport_bpm = 300.0;
                             // we are good!
                             else
                                 g_transport_bpm = dvalue;
@@ -4299,6 +4302,7 @@ int effects_init(void* client)
     g_lilv_nodes.input = lilv_new_uri(g_lv2_data, LILV_URI_INPUT_PORT);
     g_lilv_nodes.integer = lilv_new_uri(g_lv2_data, LV2_CORE__integer);
     g_lilv_nodes.license_interface = lilv_new_uri(g_lv2_data, MOD_LICENSE__interface);
+    g_lilv_nodes.is_live = lilv_new_uri(g_lv2_data, LV2_CORE__isLive);
     g_lilv_nodes.logarithmic = lilv_new_uri(g_lv2_data, LV2_PORT_PROPS__logarithmic);
     g_lilv_nodes.maximum = lilv_new_uri(g_lv2_data, LV2_CORE__maximum);
     g_lilv_nodes.midiEvent = lilv_new_uri(g_lv2_data, LV2_MIDI__MidiEvent);
@@ -4658,6 +4662,7 @@ int effects_finish(int close_client)
     lilv_node_free(g_lilv_nodes.integer);
     lilv_node_free(g_lilv_nodes.license_interface);
     lilv_node_free(g_lilv_nodes.logarithmic);
+    lilv_node_free(g_lilv_nodes.is_live);
     lilv_node_free(g_lilv_nodes.maximum);
     lilv_node_free(g_lilv_nodes.midiEvent);
     lilv_node_free(g_lilv_nodes.minimum);
@@ -4847,6 +4852,10 @@ int effects_add(const char *uri, int instance, int activate)
         control_in_size = 0;
         effect->control_index = -1;
     }
+
+    /* Query plugin features */
+    if (lilv_plugin_has_feature(effect->lilv_plugin, g_lilv_nodes.is_live))
+        effect->hints |= HINT_IS_LIVE;
 
     /* Query plugin extensions/interfaces */
     if (lilv_plugin_has_extension_data(effect->lilv_plugin, g_lilv_nodes.worker_interface))
@@ -6864,7 +6873,7 @@ int effects_monitor_parameter(int effect_id, const char *control_symbol, const c
     return SUCCESS;
 }
 
-int effects_monitor_output_parameter(int effect_id, const char *control_symbol_or_uri)
+int effects_monitor_output_parameter(int effect_id, const char *control_symbol_or_uri, int enable)
 {
     port_t *port;
 
@@ -6876,6 +6885,42 @@ int effects_monitor_output_parameter(int effect_id, const char *control_symbol_o
 
     if (port != NULL)
     {
+        if (enable == 0)
+        {
+            // check if not monitored
+            if ((port->hints & HINT_MONITORED) == 0)
+                return SUCCESS;
+
+            // remove monitored flag
+            port->hints &= ~HINT_MONITORED;
+
+            // stop postpone events thread
+            if (g_postevents_running == 1)
+            {
+                g_postevents_running = 0;
+                sem_post(&g_postevents_semaphore);
+                pthread_join(g_postevents_thread, NULL);
+            }
+
+            // flush events for all effects except this one
+            RunPostPonedEvents(effect_id);
+
+            // start thread again
+            if (g_postevents_running == 0)
+            {
+                if (g_verbose_debug)
+                {
+                    puts("DEBUG: effects_monitor_output_parameter restarted RunPostPonedEvents thread");
+                    fflush(stdout);
+                }
+
+                g_postevents_running = 1;
+                pthread_create(&g_postevents_thread, NULL, PostPonedEventsThread, NULL);
+            }
+
+            return SUCCESS;
+        }
+
         // check if already monitored
         if (port->hints & HINT_MONITORED)
             return SUCCESS;
@@ -6908,7 +6953,7 @@ int effects_monitor_output_parameter(int effect_id, const char *control_symbol_o
         if (property == NULL)
             return ERR_LV2_INVALID_PARAM_SYMBOL;
 
-        property->monitored = true;
+        property->monitored = enable != 0;
     }
 
     // activate output monitor
@@ -7276,7 +7321,7 @@ int effects_licensee(int effect_id, char **licensee_ptr)
 int effects_set_beats_per_minute(double bpm)
 {
   int result = SUCCESS;
-  if ((20.0 <= bpm) && (bpm <= 280.0)) {
+  if ((20.0 <= bpm) && (bpm <= 300.0)) {
     // Change the current global value and set a flag that it was changed.
     g_transport_bpm = bpm;
     g_transport_reset = true;
